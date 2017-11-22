@@ -87,24 +87,30 @@ void computeDP(float siga, float sigs) {
 	split(imageLab, lab);
 	for (int i = 0; i < image.rows; i++) {
 		for (int j = 0; j < image.cols; j++) {
+
+			if (lab[0].at<uchar>(i,j) != 0) {
+
+			
 			f fcourant;
-			fcourant.lisiga = lab[0].at<uchar>(i,j) / siga;
-			fcourant.asiga = lab[1].at<uchar>(i,j) / siga;
-			fcourant.bsiga = lab[2].at<uchar>(i,j) / siga;
+			fcourant.lisiga = lab[0].at<uchar>(i, j) / siga;
+			fcourant.asiga = lab[1].at<uchar>(i, j) / siga;
+			fcourant.bsiga = lab[2].at<uchar>(i, j) / siga;
 			fcourant.xisigs = i / sigs;
 			fcourant.yisigs = j / sigs;
 
 			float value = 0;
 
-			for (int k = 0; k < fi.size(); 	k++) {
+			for (int k = 0; k < fi.size(); k++) {
 				value += sqrt(pow(fcourant.lisiga - fi[k].lisiga, 2)
 					+ pow(fcourant.asiga - fi[k].asiga, 2)
 					+ pow(fcourant.bsiga - fi[k].bsiga, 2)
 					+ pow(fcourant.xisigs - fi[k].xisigs, 2)
 					+ pow(fcourant.yisigs - fi[k].yisigs, 2));
+				cout << "i = " << i << " j = " << j << " k  = " << k << endl;
 			}
 
 			dp.at<float>(i, j) = value;
+		}
 		}
 	}
 
@@ -141,7 +147,8 @@ int main() {
 
 	
 	char* imageName;
-	imageName = "C:/Users/leo-d/Desktop/projetCAVtest1.jpg";
+	//imageName = "C:\Users\leo-d\Documents\Visual Studio 2017\Projet_CAV/projetCAVtest1.jpg";
+	imageName = "../projetCAVtest1.jpg";
 	image = imread(imageName, 1);
 
 	namedWindow("Result", WINDOW_AUTOSIZE);// Create a window for display.
