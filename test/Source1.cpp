@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <numeric>
+#include <time.h>
 using namespace std;
 using namespace cv;
 
@@ -30,7 +31,8 @@ void filtering(Mat & image, Mat & filteredImage) {
 
 vector<Point> tirage(const Mat& picture, vector<float>& prob_x, vector< vector<float> >& prob_y, const int& height, const int& width, int numberPoint) 
 {
-
+	
+	srand(clock());
 	Mat src;
 
 	src = picture.clone();
@@ -78,7 +80,7 @@ vector<Point> tirage(const Mat& picture, vector<float>& prob_x, vector< vector<f
 
 		int x = (upper_bound(prob_x.begin(), prob_x.end(), rand_x) - prob_x.begin());
 		int y = (upper_bound(prob_y[x].begin(), prob_y[x].end(), rand_y) - prob_y[x].begin());
-		result.push_back(Point(y, x));
+		result.push_back(Point(y,x));
 	}
 	return result;
 }
@@ -152,18 +154,23 @@ Mat computeDP() {
 		}
 		cout << " voila la maxvalue  : " << maxValue << endl;
 		Mat todisplay;// = dp / maxValue;
-	//	cvtColor(dp, imageInLab, CV_BGR2Lab);
+
+
+		//bitwise_not(dp, dpTmp);
+
 		cv::normalize(dp, todisplay, 0, 255, NORM_MINMAX,CV_8U);
-	//	todisplay = norm_0_255(dp);
+
+	
 		namedWindow("hop", WINDOW_AUTOSIZE);// Create a window for display.
 		imshow("hop", todisplay);
-		return todisplay;
+		return dp;
 }
 
-void findPointsToWheather(Mat & wheatheringMap, int nombre) {
+vector<Point> findPointsToWheather(Mat & wheatheringMap, int nombre) {
 	vector<float> prob_x(wheatheringMap.rows);
 	vector<vector<float>> prob_y(wheatheringMap.rows, vector<float>(wheatheringMap.cols));
-	vector<Point> pointsToWheather = tirage(wheatheringMap, prob_x, prob_y, wheatheringMap.rows, wheatheringMap.cols, 15);
+	vector<Point> pointsToWheather = tirage(wheatheringMap, prob_x, prob_y, wheatheringMap.rows, wheatheringMap.cols, nombre);
+	return pointsToWheather;
 	/*
 	Mat todisplay;
 	wheatheringMap.convertTo(todisplay, CV_8UC3);
@@ -176,23 +183,48 @@ void findPointsToWheather(Mat & wheatheringMap, int nombre) {
 	imshow("hophop", todisplay);
 	*/
 }
-
-void weatherPoints(const std::vector<cv::Point> pointsToWeather, const cv::Mat& patch)
+// patch = patch à recopier.
+void weatherPoints(const std::vector<cv::Point> pointsToWeather, const cv::Mat& patch, const cv::Mat& weatheringMap )
 {
-	cv::Mat map;
-	cv::Mat weatheredImage(m_image.rows, m_image.cols, CV_32FC3);
+	cv::Mat weatheredImage(m_image.rows, m_image.cols, CV_32FC3); // result en RGB
+	cv::Mat image_float(m_image.rows, m_image.cols, CV_32FC3);
+	cv::normalize(m_image, image_float, 0, 255, NORM_MINMAX, CV_32FC3);
+
+
+	cv::Mat normalizedDP;
+	cv::normalize(weatheringMap, normalizedDP, 0, 1, NORM_MINMAX, CV_32FC1);
+	//m_image.convertTo(image_float, CV_32FC3);
+	
+	//m_image.convertTo(image_float, CV_32FC3);
+	//image_float = image_float / 255;
+
 	for (int p = 0; p < pointsToWeather.size(); p++)
 	{
 		cv::Point currentPoint = pointsToWeather[p];
 		for (int i_patch = std::floor(currentPoint.x - patch.rows / 2); i_patch < std::floor(currentPoint.x + patch.rows / 2); i_patch++)
 		{
+			int new_i = 0;
 			for (int j_patch = std::floor(currentPoint.y - patch.cols / 2); j_patch < std::floor(currentPoint.y + patch.cols / 2); j_patch++)
 			{
-				weatheredImage.at<Vec3f>(i_patch, j_patch)[0] = (1 - map.at<float>(currentPoint)) * m_image.at<Vec3f>(i_patch, j_patch)
-					+ map.at<float>(currentPoint) * patch.at<Vec3f>(i_patch, j_patch);
+				int new_j = 0;
+				if (!(i_patch < 0 || i_patch >= m_image.rows || j_patch < 0 || j_patch >= m_image.cols))
+				{
+					weatheredImage.at<Vec3f>(i_patch, j_patch)[0] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[0] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[0];
+					weatheredImage.at<Vec3f>(i_patch, j_patch)[1] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[1] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[1];
+					weatheredImage.at<Vec3f>(i_patch, j_patch)[2] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[2] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[2];
+					cout << (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[0] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[0] << endl;
+				}
+				new_j++;
 			}
+			new_i++;
 		}
 	}
+	imshow("en float ", weatheredImage);
+	Mat todisplay;
+//	weatheredImage.convertTo(todisplay, CV_8UC3);
+	weatheredImage.convertTo(todisplay, CV_8UC3);
+	//cv::normalize(weatheredImage, todisplay, 0, 255, NORM_MINMAX, CV_8UC3);
+	imshow("Result ", todisplay);
 }
 
 void on_mouse(int e, int x, int y, int d, void *ptr)
@@ -206,8 +238,14 @@ void on_mouse(int e, int x, int y, int d, void *ptr)
 		computeOmega(10);
 		computeFV();
 		Mat dp = computeDP();
-		findPointsToWheather(dp, 15);
-		
+	
+		Mat dpProba = 1.0f - dp;
+	//	imshow("dpTMP",dp);
+		// inverser dp pour trouver les points .
+		vector<Point> pointsToWeather = findPointsToWheather(dpProba, 100);
+		Mat patch = Mat::ones(10, 10, CV_32FC3);
+		weatherPoints(pointsToWeather, patch, dp);
+				
 	}
 }
 
