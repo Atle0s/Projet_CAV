@@ -1,13 +1,11 @@
 #include <iostream>
 #include <opencv2\opencv.hpp>
 #include <stdlib.h>
-#include <math.h>
 #include <numeric>
 #include <time.h>
+
 using namespace std;
 using namespace cv;
-
-
 
 Point m_nonWP;
 vector<Point> m_omega;
@@ -30,53 +28,103 @@ void filtering(Mat & image, Mat & filteredImage) {
 	
 }
 
-vector<Point> tirage(const Mat& picture, vector<float>& prob_x, vector< vector<float> >& prob_y, const int& height, const int& width, int numberPoint) 
+vector<Point> tirage(const Mat& img, int points_number) 
 {
-	srand(clock());
+	cv::Mat norm_img;
+	cv::normalize(img, norm_img, 0, 255, NORM_MINMAX, CV_32FC1);
 
-	int count = 0;
-	vector<int> count_y(prob_x.size());
-
-	// We count pixels on the edges
-	for (int i = 0; i < height; i++)
+	// Find the sum of all values to compute rows probabilities
+	// and find the sums of all values in each row to compute
+	// column knowing row probabilities
+	
+	float total_values_sum = 0.0f;
+	std::vector<float> row_values_sum(norm_img.rows);
+	for (int i = 0; i < norm_img.rows; i++)
 	{
-		for (int j = 0; j < width; j++)
+		row_values_sum[i] = 0.0f;
+
+		for (int j = 0; j < norm_img.cols; j++)
 		{
-			prob_x[i] = prob_x[i] + 1;
-			prob_y[i][j] = 1;
-			count = count + 1;
-			count_y[i] = count_y[i] + 1;
+			total_values_sum += norm_img.at<float>(i, j);
+			row_values_sum[i] += norm_img.at<float>(i, j);
 		}
 	}
 
-	// We divided by the count to create a probability
-	std::transform(prob_x.begin(), prob_x.end(), prob_x.begin(), std::bind2nd(std::divides<float>(), count));
-
-	for (unsigned int i = 0; i < count_y.size(); i++)
+	// Compute each row probability and store the cumulated
+	// probability and store it in an array for later use.
+	//
+	// /!\ WARNING :
+	//			The array is one cell longer than needed and
+	//			is padded with a zero for the first	value to
+	//			make resaerch easier later. 
+	
+	std::vector<float> row_cumulated_probs(norm_img.rows + 1);
+	row_cumulated_probs[0] = 0.0f;
+	
+	for (int i = 0; i < norm_img.rows; i++)
 	{
-		if (count_y[i] != 0)
+		// Start filling the array at the second cell
+		row_cumulated_probs[i + 1] = row_cumulated_probs[i] + (row_values_sum[i] / total_values_sum);
+	}
+
+	// Compute column knowing row probability for each row
+	// and store the results in a two dimensionnal array.
+
+	std::vector<std::vector<float>> col_cumulated_probs_knowing_row(norm_img.rows);
+	
+	for (int i = 0; i < norm_img.rows; i++)
+	{
+		// /!\ WARNING :
+		//			Same as earlier, the array is one cell longer
+		//			and is padded with a zero.
+
+		col_cumulated_probs_knowing_row[i] = std::vector<float>(norm_img.cols + 1);
+		col_cumulated_probs_knowing_row[i][0] = 0.0f;
+
+		for (int j = 0; j < norm_img.cols; j++)
 		{
-			std::transform(prob_y[i].begin(), prob_y[i].end(), prob_y[i].begin(), std::bind2nd(std::divides<float>(), count_y[i]));
+			col_cumulated_probs_knowing_row[i][j + 1] = col_cumulated_probs_knowing_row[i][j] + (norm_img.at<float>(i, j) / row_values_sum[i]);
 		}
 	}
 
-	// Cumulative sum
-	partial_sum(prob_x.begin(), prob_x.end(), prob_x.begin(), plus<double>());
-	for (unsigned int i = 0; i < count_y.size(); i++)
+	std::vector<cv::Point> result;
+	for (int p = 0; p < points_number; p++)
 	{
-		partial_sum(prob_y[i].begin(), prob_y[i].end(), prob_y[i].begin(), plus<double>());
+		// Put current system clock as random generator seed
+		srand(clock());
+
+		// Generate a random number and find where it falls in the
+		// rows probabilities
+
+		float rand_row = rand() / static_cast<float>(RAND_MAX);
+		int drawn_row_index = 0;
+
+		for (int i = 0; i < img.rows; i++)
+		{
+			if (row_cumulated_probs[i] <= rand_row && rand_row <= row_cumulated_probs[i +1])
+			{
+				drawn_row_index = i;
+			}
+		}
+		
+		// Generate a random number and find where it falls in the
+		// column probabilities knowing row, knowing the row we
+		// found just before
+		
+		float rand_col = rand() / static_cast<float>(RAND_MAX);
+		int drawn_col_index = 0;
+		
+		for (int j = 0; j < img.cols; j++)
+		{
+			if (col_cumulated_probs_knowing_row[drawn_row_index][j] <= rand_col && rand_col <= col_cumulated_probs_knowing_row[drawn_row_index][j + 1])
+			{
+				drawn_col_index = j;
+			}
+		}
+
+		result.push_back(cv::Point(drawn_row_index, drawn_col_index));
 	}
 
-	vector<Point> result;
-	for (int i = 0; i < numberPoint; i++){
-
-		double rand_x = rand() / (double)RAND_MAX;
-		double rand_y = rand() / (double)RAND_MAX;
-
-		int x = (upper_bound(prob_x.begin(), prob_x.end(), rand_x) - prob_x.begin());
-		int y = (upper_bound(prob_y[x ].begin(), prob_y[x ].end(), rand_y) - prob_y[x ].begin());
-		result.push_back(Point(y,x));
-	}
 	return result;
 }
 
@@ -165,9 +213,7 @@ return dp;
 }
 
 vector<Point> findPointsToWheather(Mat & wheatheringMap, int nombre) {
-	vector<float> prob_x(wheatheringMap.rows);
-	vector<vector<float>> prob_y(wheatheringMap.rows, vector<float>(wheatheringMap.cols));
-	vector<Point> pointsToWheather = tirage(wheatheringMap, prob_x, prob_y, wheatheringMap.rows, wheatheringMap.cols, nombre);
+	vector<Point> pointsToWheather = tirage(wheatheringMap, nombre);
 	return pointsToWheather;
 	/*
 	Mat todisplay;
@@ -251,7 +297,7 @@ void mainFunction(Mat & image_float,Mat & carteProba, const cv::Mat& patch, cons
 	cv::Mat normalizedDP;
 	cv::normalize(weatheringMap, normalizedDP, 0, 1, NORM_MINMAX, CV_32FC1);
 
-	vector<Point> pointsToWeather = findPointsToWheather(carteProba, 100);
+	vector<Point> pointsToWeather = findPointsToWheather(carteProba, 10);
 	updateCarteProba(carteProba, pointsToWeather);
 
 	for (int p = 0; p < pointsToWeather.size(); p++)
