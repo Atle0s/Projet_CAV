@@ -87,12 +87,12 @@ vector<Point> tirage(const Mat& img, int points_number)
 		}
 	}
 
+	// Put current system clock as random generator seed
+	srand(clock());
+
 	std::vector<cv::Point> result;
 	for (int p = 0; p < points_number; p++)
 	{
-		// Put current system clock as random generator seed
-		srand(clock());
-
 		// Generate a random number and find where it falls in the
 		// rows probabilities
 
@@ -122,7 +122,7 @@ vector<Point> tirage(const Mat& img, int points_number)
 			}
 		}
 
-		result.push_back(cv::Point(drawn_row_index, drawn_col_index));
+		result.push_back(cv::Point(drawn_col_index, drawn_row_index));
 	}
 
 	return result;
@@ -282,7 +282,7 @@ void weatherPoints(const std::vector<cv::Point> pointsToWeather, const cv::Mat& 
 Mat updateCarteProba(Mat & carteProba, vector<Point> oldPointsToWeather) {
 
 	for (int i = 0; i < oldPointsToWeather.size(); i++) {
-		carteProba.at<float>(oldPointsToWeather[i].x, oldPointsToWeather[i].y) = 0.0f;
+		carteProba.at<float>(oldPointsToWeather[i]) = 0.0f;
 	}
 
 	return carteProba;
@@ -297,8 +297,7 @@ void mainFunction(Mat & image_float,Mat & carteProba, const cv::Mat& patch, cons
 	cv::Mat normalizedDP;
 	cv::normalize(weatheringMap, normalizedDP, 0, 1, NORM_MINMAX, CV_32FC1);
 
-	vector<Point> pointsToWeather = findPointsToWheather(carteProba, 10);
-	updateCarteProba(carteProba, pointsToWeather);
+	vector<Point> pointsToWeather = findPointsToWheather(carteProba, 100);
 
 	for (int p = 0; p < pointsToWeather.size(); p++)
 	{
@@ -312,8 +311,8 @@ void mainFunction(Mat & image_float,Mat & carteProba, const cv::Mat& patch, cons
 				int new_j = 0;
 				if (!(i_patch < 0 || i_patch >= m_image.rows || j_patch < 0 || j_patch >= m_image.cols))
 				{
-					weatheredImage.at<Vec3f>(i_patch, j_patch)[0] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[0] + normalizedDP.at<float>(currentPoint) *patch.at<Vec3f>(new_i, new_j)[0];
-					weatheredImage.at<Vec3f>(i_patch, j_patch)[1] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[1] + normalizedDP.at<float>(currentPoint) *patch.at<Vec3f>(new_i, new_j)[1];
+					weatheredImage.at<Vec3f>(i_patch, j_patch)[0] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[0] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[0];
+					weatheredImage.at<Vec3f>(i_patch, j_patch)[1] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[1] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[1];
 					weatheredImage.at<Vec3f>(i_patch, j_patch)[2] = (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[2] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[2];
 					//	cout << (1 - normalizedDP.at<float>(currentPoint)) * image_float.at<Vec3f>(i_patch, j_patch)[0] + normalizedDP.at<float>(currentPoint) * patch.at<Vec3f>(new_i, new_j)[0] << endl;
 				}
@@ -323,6 +322,7 @@ void mainFunction(Mat & image_float,Mat & carteProba, const cv::Mat& patch, cons
 		}
 	}
 
+	updateCarteProba(carteProba, pointsToWeather);
 
 	Mat todisplay;
 	//	weatheredImage.convertTo(todisplay, CV_8UC3);
